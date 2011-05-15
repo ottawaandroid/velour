@@ -26,6 +26,7 @@ public class MainActivity extends ListActivity
 
 	private void buildActivities() {
 		mActivities.put("Panels", PanelsDemoActivity.class);
+		mActivities.put("Panels Custom", CustomPanelsDemoActivity.class);
 	}
 	
 	private void setupList() {

@@ -12,5 +12,6 @@
             </intent-filter>
         </activity>
         <activity android:name="PanelsDemoActivity"></activity>
+        <activity android:name="CustomPanelsDemoActivity"></activity>
     </application>
 </manifest> 
