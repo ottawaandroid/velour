@@ -29,6 +29,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
@@ -242,7 +243,7 @@ public class Panels extends ViewGroup {
 		}
 		
 		protected int getWidthGivenNext(View nv) {
-			return getWidth() - getChildCount();
+			return getWidth() * getChildCount();
 		}
 	}
 	
@@ -411,9 +412,9 @@ public class Panels extends ViewGroup {
 		mDrawState = mNeutralDrawState;
 		
 		if (pi < 0) {
-			wrapIndexLeft();
+			pi = wrapIndexLeft();
 		} else if (pi > cc) {
-			wrapIndexRight();
+			pi = wrapIndexRight();
 		}
 		
 		mNext = pi;
@@ -570,7 +571,8 @@ public class Panels extends ViewGroup {
 				int space =	cr - sx - getWidth();
 				if (space <= 0 ) {
 					if ( wp ) {
-						mDrawState = mRightDrawState;
+                        mDrawState = mRightDrawState;
+                        enableChildrenCache();
 						space += getWidth() * 2;
 					} else {
 						space = 0;
