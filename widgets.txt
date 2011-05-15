@@ -1,0 +1,6 @@
+Panels (bug fixing)
+Panels where scrolling can be driven by buttons on the top
+Panels w/a a tracker on top like gdocs
+moving header like in gmail messages
+swipe areas for listviews (like twitter) - a view switcher and panels version
+a top action bar (with progress) like twitter or linkedin including optional status area below
