@@ -1,10 +1,11 @@
-package ca.strangeware.chores;
+package ca.ottawaandroid.velour;
 
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
@@ -13,13 +14,17 @@ import android.widget.Scroller;
 
 public class Panels extends ViewGroup {
 	private static final int INVALID_PANEL = -1;
-	// TODO: make configurable
-	private static final int FLING_VELOCITY = 1000;
+
 	private Scroller mScroller;
 	private int mCurrent;
 	private int mNext;
 	private int mCurrentScrollX;
 	private boolean mFirstLayout = true;
+
+	private boolean mWrapPermitted = true;
+	private int mFlingVelocity = 1000;
+	private int mDefaultPanel = 0;
+	private int mTouchFuzz = 0;
 
 	public Panels(Context ctx) {
 		super(ctx);
@@ -27,83 +32,58 @@ public class Panels extends ViewGroup {
 
 	public Panels(Context ctx, AttributeSet as, int defStyle) {
 		super(ctx, as, defStyle);
-		setup();
+		setup(as);
 	}
 
 	public Panels(Context ctx, AttributeSet as) {
 		super(ctx, as);
-		setup();
+		setup(as);
 	}
 	
-	private void setup() {
+	private void setup(AttributeSet as) {
+		setupOptions(as);
+		setupControl();
+	}
+
+	private void setupControl() {
 		mScroller = new Scroller(getContext());
 		mCurrent = getDefaultPanel();
 	}
 
-	// TODO: configurable
+	private void setupOptions(AttributeSet as) {
+		// TODO: not read properly yet..
+		mWrapPermitted = as.getAttributeBooleanValue("velour", "permit_wrapping", mWrapPermitted);
+		mFlingVelocity = as.getAttributeIntValue("velour", "fling_velocity", mFlingVelocity);
+		mDefaultPanel = as.getAttributeIntValue("velour", "default_panel", mDefaultPanel);
+		mTouchFuzz = as.getAttributeIntValue("velour", "touch_fuzz", mTouchFuzz);
+	}
+
+	// Overrideable
 	protected int getDefaultPanel() {
-		return 0;
+		return mDefaultPanel;
 	}
 
-	// config - override in derived classes or XML
 	protected int getTouchFuzz() {
-		return 0;
+		return mTouchFuzz;
 	}
 
+	protected boolean isWrappingPermitted() {
+		return mWrapPermitted;
+	}
+	
+	protected int getFlingVelocity() {
+		return mFlingVelocity;
+	}
+	// end overrideable
+	
 	private boolean isNextValid() {
 		return INVALID_PANEL != mNext;
 	}
 	
-	@Override
-	protected void onLayout(boolean changed, int l, int t, int r, int b) {
-		layoutAllChildren();			
-		setInitialPosition();
-	}
-
-	private void layoutAllChildren() {
-		final int c = getChildCount();
-		int left = 0;
-		for ( int i = 0; i < c; i++ ) {
-			final View ch = getChildAt(i);
-			if ( View.GONE != ch.getVisibility() ) {
-				final int w = ch.getMeasuredWidth();
-				ch.layout(left, 0, left + w, ch.getMeasuredHeight());
-				left += w;
-			}
-		}
-	}
-
-	private void setInitialPosition() {
+	private void scrollToDefault() {
 		if ( mFirstLayout ) {
 			scrollTo(mCurrent * getMeasuredWidth(), 0);
 			mFirstLayout = false;
-		}
-	}
-	
-	@Override
-	public void computeScroll() {
-		final int sx = getScrollX();
-		final int sy = getScrollY();
-		if ( mScroller.computeScrollOffset() ) {
-			int cx = mScroller.getCurrX();
-			int cy = mScroller.getCurrY();
-			
-			if ( cx != sx || cy != sy ){
-				scrollTo(cx, cy);
-			} else {
-				invalidate();
-			}
-		} else if ( isNextValid() ) {
-			mCurrent = Math.max(0, Math.min(mNext, getChildCount() - 1));
-			mNext = INVALID_PANEL;
-
-			mDrawState = mNeutralDrawState;
-			clearChildrenCache();
-
-			mCurrentScrollX = mCurrent * getWidth();
-			if ( sx != mCurrentScrollX ) {
-				scrollTo(mCurrentScrollX, sy);
-			}	
 		}
 	}
 
@@ -255,6 +235,52 @@ public class Panels extends ViewGroup {
 			mDrawState.draw(can);
 		}
 	}
+	
+	@Override
+	protected void onLayout(boolean changed, int l, int t, int r, int b) {
+		layoutAllChildren();			
+		scrollToDefault();
+	}
+
+	private void layoutAllChildren() {
+		final int c = getChildCount();
+		int left = 0;
+		for ( int i = 0; i < c; i++ ) {
+			final View ch = getChildAt(i);
+			if ( View.GONE != ch.getVisibility() ) {
+				final int w = ch.getMeasuredWidth();
+				ch.layout(left, 0, left + w, ch.getMeasuredHeight());
+				left += w;
+			}
+		}
+	}
+
+	@Override
+	public void computeScroll() {
+		final int sx = getScrollX();
+		final int sy = getScrollY();
+		if ( mScroller.computeScrollOffset() ) {
+			int cx = mScroller.getCurrX();
+			int cy = mScroller.getCurrY();
+			
+			if ( cx != sx || cy != sy ){
+				scrollTo(cx, cy);
+			} else {
+				invalidate();
+			}
+		} else if ( isNextValid() ) {
+			mCurrent = Math.max(0, Math.min(mNext, getChildCount() - 1));
+			mNext = INVALID_PANEL;
+
+			mDrawState = mNeutralDrawState;
+			clearChildrenCache();
+
+			mCurrentScrollX = mCurrent * getWidth();
+			if ( sx != mCurrentScrollX ) {
+				scrollTo(mCurrentScrollX, sy);
+			}	
+		}
+	}
 
 	@Override
 	protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -337,22 +363,37 @@ public class Panels extends ViewGroup {
 		}
 	}
 
+	private int wrapIndexLeft() {
+		int rv = 0;
+		if ( isWrappingPermitted() ) {
+			rv = getChildCount();
+			mDrawState = mLeftDrawState;
+		}
+		return rv;
+	}
+	
+	private int wrapIndexRight() {
+		int rv = getChildCount();
+		if ( isWrappingPermitted() ) {
+			rv = 0;
+			mDrawState = mRightDrawState;
+		}
+		return rv;
+	}
+	
 	private int changePanel(int pi) {
 		final int cc = getChildCount() - 1;
 		final int requestedI = pi;
 
-		// wrap around
-		// TODO: needs to be configurable
+		mDrawState = mNeutralDrawState;
+		
 		if (pi < 0) {
-			pi = cc;
-			mDrawState = mLeftDrawState;
+			wrapIndexLeft();
 		} else if (pi > cc) {
-			pi = 0;
-			mDrawState = mRightDrawState;
-		} else {
-			mDrawState = mNeutralDrawState;
+			wrapIndexRight();
 		}
 		
+		mNext = pi;
 		return requestedI * getWidth();
 	}	
 
@@ -361,8 +402,6 @@ public class Panels extends ViewGroup {
 		
 		final int nx = changePanel(pi);
 		
-		mNext = pi;
-
 		clearFocus(pi);
 		startScroll(nx);
 		invalidate();
@@ -370,11 +409,11 @@ public class Panels extends ViewGroup {
 
 	private void clearFocus(int pi) {
 		final boolean changing = pi != mCurrent;
-		View focusedChild = getFocusedChild();
-		if (focusedChild != null
+		View fc = getFocusedChild();
+		if (fc != null
 				&& changing
-				&& focusedChild == getChildAt(mCurrent)) {
-			focusedChild.clearFocus();
+				&& fc == getChildAt(mCurrent)) {
+			fc.clearFocus();
 		}
 	}
 
@@ -437,7 +476,6 @@ public class Panels extends ViewGroup {
 		
 		private State onInterceptActionDown(final float x, final float y) {
 			mLastX = x;
-//				mAllowLongPress = true;
 
 			return mScroller.isFinished() ? mNeutralState : mMotionState;
 		}
@@ -448,17 +486,6 @@ public class Panels extends ViewGroup {
 			if ( hadLateralMotion(x) ) {
 				rv = mMotionState;
 				enableChildrenCache();
-				// Either way, cancel any pending longpress
-//					if (mAllowLongPress) {
-//						mAllowLongPress = false;
-					// Try canceling the long press. It could also have been
-					// scheduled
-					// by a distant descendant, so use the mAllowLongPress flag
-					// to block
-					// everything
-//						final View currentScreen = getChildAt(mCurrent);
-//						currentScreen.cancelLongPress();
-//					}
 			}
 			
 			return rv;
@@ -484,10 +511,11 @@ public class Panels extends ViewGroup {
 		@Override
 		public State onActionUp(MotionEvent e) {
 			int vx = (int) mTracker.getXVelocity();
+			final int fv = getFlingVelocity();
 
-			if (vx > FLING_VELOCITY && mCurrent > 0) {
+			if (vx > fv && mCurrent > 0) {
 				scrollByPanel(mCurrent - 1);
-			} else if (vx < -FLING_VELOCITY && mCurrent < getChildCount() - 1) {
+			} else if (vx < -fv && mCurrent < getChildCount() - 1) {
 				scrollByPanel(mCurrent + 1);
 			} else {
 				scrollByCurrentPosition();
@@ -499,24 +527,34 @@ public class Panels extends ViewGroup {
 		@Override
 		public State onActionMove(MotionEvent e) {
 			final float x = e.getX();
-			final int dx = (int) (mLastX - x);
+			final boolean wp = isWrappingPermitted();
+			final int sx = getScrollX();
+			int dx = (int) (mLastX - x);
 
 			mLastX = x;
 
-			if (dx < 0) {
-				if (getScrollX() <= 0) {
-					mDrawState = mLeftDrawState;
+			if ( dx < 0 ) {
+				if (sx <= 0 ) {
+					if ( wp ) {
+						mDrawState = mLeftDrawState;
+					} else {
+						dx = 0;
+					}
 				}
 				scrollBy(dx, 0);
-			} else if (dx > 0) {
+			} else if ( dx > 0 ) {
 				int cr = getChildAt(getChildCount() - 1).getRight();
-				int availableToScroll =	cr - getScrollX() - getWidth();
-				if (availableToScroll <= 0) {
-					mDrawState = mRightDrawState;
-					availableToScroll += getWidth() * 2;
+				int space =	cr - sx - getWidth();
+				if (space <= 0 ) {
+					if ( wp ) {
+						mDrawState = mRightDrawState;
+						space += getWidth() * 2;
+					} else {
+						space = 0;
+					}
 				}
-				if (availableToScroll > 0) {
-					scrollBy(Math.min(availableToScroll, dx), 0);
+				if ( space > 0 ) {
+					scrollBy(Math.min(space, dx), 0);
 				}
 			}
 
@@ -529,7 +567,7 @@ public class Panels extends ViewGroup {
 
 	State mState = mNeutralState;
 	
-	// shared b/w State instances 
+	// shared b/w State instances - ugly
 	private float mLastX;
 	
 	@Override
@@ -555,18 +593,20 @@ public class Panels extends ViewGroup {
 					case MotionEvent.ACTION_CANCEL:
 					case MotionEvent.ACTION_UP:
 						mState = mNeutralState;
-			//			mAllowLongPress = false;
 						break;
 				}
 	
 				intercept = mState.intercepted();
 			}
-		}		
+		}
+		
 		return intercept;
 	}
 
 	@Override
 	public boolean onTouchEvent(MotionEvent e) {
+		boolean rv = false;
+		
 		if ( getChildCount() > 0 ) {
 			mState.trackMotion(e);
 	
@@ -587,8 +627,9 @@ public class Panels extends ViewGroup {
 					mState = mState.onActionCancel(e);
 					break;
 			}
+			rv = true;
 		}
 		
-		return true;
+		return rv;
 	}
 }
