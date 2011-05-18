@@ -227,7 +227,7 @@ public class Panels extends ViewGroup {
         }
     }
 
-    class LeftMotionDrawingState extends InMotionDrawingState {
+    private class LeftMotionDrawingState extends InMotionDrawingState {
         protected View getWrappingNext() {
             return getChildAt(getChildCount() - 1);
         }
@@ -237,7 +237,7 @@ public class Panels extends ViewGroup {
         }
     }
 
-    class RightMotionDrawingState extends InMotionDrawingState {
+    private class RightMotionDrawingState extends InMotionDrawingState {
         protected View getWrappingNext() {
             return getChildAt(0);
         }
@@ -253,19 +253,6 @@ public class Panels extends ViewGroup {
 
     private DrawingState mDrawState = mNeutralDrawState;
 
-    @Override
-    protected void dispatchDraw(Canvas can) {
-        if ( getChildCount() > 0 ) {
-            mDrawState.draw(can);
-        }
-    }
-
-    @Override
-    protected void onLayout(boolean changed, int l, int t, int r, int b) {
-        layoutAllChildren();
-        scrollToDefault();
-    }
-
     private void layoutAllChildren() {
         final int c = getChildCount();
         int left = 0;
@@ -277,6 +264,253 @@ public class Panels extends ViewGroup {
                 left += w;
             }
         }
+    }
+
+    private int getCurrentPanel() {
+        return mCurrent;
+    }
+
+    private void scrollByCurrentPosition() {
+        final int w = getWidth();
+        final int sx = getScrollX();
+        final int sw = sx + (w / 2);
+        final int cc = getChildCount();
+        int pi = - 1;
+
+        if (sw > w * cc) {
+            pi = cc;
+        } else if ( sw > 0 ){
+            pi = (sx + (w / 2)) / w;
+        }
+        scrollByPanel(pi);
+    }
+
+    private void scrollByPanel(int pi) {
+        if ( mScroller.isFinished() ) {
+            scrollByPanelFinishScrolling(pi);
+        }
+    }
+
+    private int wrapIndexLeft() {
+        int rv = 0;
+        if ( isWrappingPermitted() ) {
+            rv = getChildCount();
+            mDrawState = mLeftDrawState;
+        }
+        return rv;
+    }
+
+    private int wrapIndexRight() {
+        int rv = getChildCount();
+        if ( isWrappingPermitted() ) {
+            rv = 0;
+            mDrawState = mRightDrawState;
+        }
+        return rv;
+    }
+
+    private int changePanel(int pi) {
+        final int cc = getChildCount() - 1;
+        final int requestedI = pi;
+
+        mDrawState = mNeutralDrawState;
+
+        if (pi < 0) {
+            pi = wrapIndexLeft();
+        } else if (pi > cc) {
+            pi = wrapIndexRight();
+        }
+
+        mNext = pi;
+        return requestedI * getWidth();
+    }
+
+    private void scrollByPanelFinishScrolling(int pi) {
+        enableChildrenCache();
+
+        final int nx = changePanel(pi);
+
+        clearFocus(pi);
+        startScroll(nx);
+        invalidate();
+    }
+
+    private void clearFocus(int pi) {
+        final boolean changing = pi != mCurrent;
+        View fc = getFocusedChild();
+        if (fc != null
+                && changing
+                && fc == getChildAt(mCurrent)) {
+            fc.clearFocus();
+        }
+    }
+
+    private void startScroll(final int nx) {
+        final int delta = nx - getScrollX();
+        mScroller.startScroll(getScrollX(), 0, delta, 0, Math.abs(delta) * 2);
+    }
+
+    private class State {
+        protected VelocityTracker mTracker;
+
+        private boolean hadLateralMotion(float x) {
+            return ((int) Math.abs(x - mLastX) > getTouchFuzz());
+        }
+
+        public void trackMotion(MotionEvent e) {
+            if (mTracker == null) {
+                mTracker = VelocityTracker.obtain();
+            }
+            mTracker.addMovement(e);
+        }
+
+        public boolean shouldDrawCurrentChild() {
+            return true;
+        }
+
+        public boolean intercepted() {
+            return false;
+        }
+
+        public boolean interceptWithoutHandling(int action) {
+            return false;
+        }
+
+        public State onActionDown(MotionEvent e) {
+            if (!mScroller.isFinished()) {
+                mScroller.abortAnimation();
+            }
+
+            mLastX = e.getX();
+            return this;
+        }
+
+        public State onActionUp(MotionEvent e) {
+            if (mTracker != null) {
+                mTracker.recycle();
+                mTracker = null;
+            }
+
+            return mNeutralState;
+        }
+
+        public State onActionMove(MotionEvent e) {
+            return mMotionState;
+        }
+
+        public State onActionCancel(MotionEvent e) {
+            return mNeutralState;
+        }
+
+        private State onInterceptActionDown(final float x, final float y) {
+            mLastX = x;
+
+            return mScroller.isFinished() ? mNeutralState : mMotionState;
+        }
+
+        private State onInterceptActionMove(final float x, final float y) {
+            State rv = this;
+
+            if ( hadLateralMotion(x) ) {
+                rv = mMotionState;
+                enableChildrenCache();
+            }
+
+            return rv;
+        }
+    };
+
+    private class InMotion extends State {
+        @Override
+        public boolean interceptWithoutHandling(int action) {
+            return (action == MotionEvent.ACTION_MOVE);
+        }
+
+        @Override
+        public boolean intercepted() {
+            return true;
+        }
+
+        @Override
+        public boolean shouldDrawCurrentChild() {
+            return false;
+        }
+
+        @Override
+        public State onActionUp(MotionEvent e) {
+            int vx = (int) mTracker.getXVelocity();
+            final int fv = getFlingVelocity();
+
+            if (vx > fv && mCurrent > 0) {
+                scrollByPanel(mCurrent - 1);
+            } else if (vx < -fv && mCurrent < getChildCount() - 1) {
+                scrollByPanel(mCurrent + 1);
+            } else {
+                scrollByCurrentPosition();
+            }
+
+            return super.onActionUp(e);
+        }
+
+        @Override
+        public State onActionMove(MotionEvent e) {
+            final float x = e.getX();
+            final boolean wp = isWrappingPermitted();
+            final int sx = getScrollX();
+            int dx = (int) (mLastX - x);
+
+            mLastX = x;
+
+            if ( dx < 0 ) {
+                if (sx <= 0 ) {
+                    if ( wp ) {
+                        mDrawState = mLeftDrawState;
+                    } else {
+                        dx = 0;
+                    }
+                }
+                scrollBy(dx, 0);
+            } else if ( dx > 0 ) {
+                int cr = getChildAt(getChildCount() - 1).getRight();
+                int space = cr - sx - getWidth();
+                if (space <= 0 ) {
+                    if ( wp ) {
+                        mDrawState = mRightDrawState;
+                        enableChildrenCache();
+                        space += getWidth() * 2;
+                    } else {
+                        space = 0;
+                    }
+                }
+                if ( space > 0 ) {
+                    scrollBy(Math.min(space, dx), 0);
+                }
+            }
+
+            return super.onActionMove(e);
+        }
+    };
+
+    State mNeutralState = new State();
+    State mMotionState = new InMotion();
+
+    State mState = mNeutralState;
+
+    // shared b/w State instances - ugly
+    private float mLastX;
+
+    // overrides
+    @Override
+    protected void dispatchDraw(Canvas can) {
+        if ( getChildCount() > 0 ) {
+            mDrawState.draw(can);
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        layoutAllChildren();
+        scrollToDefault();
     }
 
     @Override
@@ -361,239 +595,6 @@ public class Panels extends ViewGroup {
         return handled;
     }
 
-    private int getCurrentPanel() {
-        return mCurrent;
-    }
-
-    private void scrollByCurrentPosition() {
-        final int w = getWidth();
-        final int sx = getScrollX();
-        final int sw = sx + (w / 2);
-        final int cc = getChildCount();
-        int pi = - 1;
-
-        if (sw > w * cc) {
-            pi = cc;
-        } else if ( sw > 0 ){
-            pi = (sx + (w / 2)) / w;
-        }
-        scrollByPanel(pi);
-    }
-
-    public void scrollByPanel(int pi) {
-        if ( mScroller.isFinished() ) {
-            scrollByPanelFinishScrolling(pi);
-        }
-    }
-
-    private int wrapIndexLeft() {
-        int rv = 0;
-        if ( isWrappingPermitted() ) {
-            rv = getChildCount();
-            mDrawState = mLeftDrawState;
-        }
-        return rv;
-    }
-
-    private int wrapIndexRight() {
-        int rv = getChildCount();
-        if ( isWrappingPermitted() ) {
-            rv = 0;
-            mDrawState = mRightDrawState;
-        }
-        return rv;
-    }
-
-    private int changePanel(int pi) {
-        final int cc = getChildCount() - 1;
-        final int requestedI = pi;
-
-        mDrawState = mNeutralDrawState;
-
-        if (pi < 0) {
-            pi = wrapIndexLeft();
-        } else if (pi > cc) {
-            pi = wrapIndexRight();
-        }
-
-        mNext = pi;
-        return requestedI * getWidth();
-    }
-
-    private void scrollByPanelFinishScrolling(int pi) {
-        enableChildrenCache();
-
-        final int nx = changePanel(pi);
-
-        clearFocus(pi);
-        startScroll(nx);
-        invalidate();
-    }
-
-    private void clearFocus(int pi) {
-        final boolean changing = pi != mCurrent;
-        View fc = getFocusedChild();
-        if (fc != null
-                && changing
-                && fc == getChildAt(mCurrent)) {
-            fc.clearFocus();
-        }
-    }
-
-    private void startScroll(final int nx) {
-        final int delta = nx - getScrollX();
-        mScroller.startScroll(getScrollX(), 0, delta, 0, Math.abs(delta) * 2);
-    }
-
-    class State {
-        protected VelocityTracker mTracker;
-
-        private boolean hadLateralMotion(float x) {
-            return ((int) Math.abs(x - mLastX) > getTouchFuzz());
-        }
-
-        public void trackMotion(MotionEvent e) {
-            if (mTracker == null) {
-                mTracker = VelocityTracker.obtain();
-            }
-            mTracker.addMovement(e);
-        }
-
-        public boolean shouldDrawCurrentChild() {
-            return true;
-        }
-
-        public boolean intercepted() {
-            return false;
-        }
-
-        public boolean interceptWithoutHandling(int action) {
-            return false;
-        }
-
-        public State onActionDown(MotionEvent e) {
-            if (!mScroller.isFinished()) {
-                mScroller.abortAnimation();
-            }
-
-            mLastX = e.getX();
-            return this;
-        }
-
-        public State onActionUp(MotionEvent e) {
-            if (mTracker != null) {
-                mTracker.recycle();
-                mTracker = null;
-            }
-
-            return mNeutralState;
-        }
-
-        public State onActionMove(MotionEvent e) {
-            return mMotionState;
-        }
-
-        public State onActionCancel(MotionEvent e) {
-            return mNeutralState;
-        }
-
-        private State onInterceptActionDown(final float x, final float y) {
-            mLastX = x;
-
-            return mScroller.isFinished() ? mNeutralState : mMotionState;
-        }
-
-        private State onInterceptActionMove(final float x, final float y) {
-            State rv = this;
-
-            if ( hadLateralMotion(x) ) {
-                rv = mMotionState;
-                enableChildrenCache();
-            }
-
-            return rv;
-        }
-    };
-
-    class InMotion extends State {
-        @Override
-        public boolean interceptWithoutHandling(int action) {
-            return (action == MotionEvent.ACTION_MOVE);
-        }
-
-        @Override
-        public boolean intercepted() {
-            return true;
-        }
-
-        @Override
-        public boolean shouldDrawCurrentChild() {
-            return false;
-        }
-
-        @Override
-        public State onActionUp(MotionEvent e) {
-            int vx = (int) mTracker.getXVelocity();
-            final int fv = getFlingVelocity();
-
-            if (vx > fv && mCurrent > 0) {
-                scrollByPanel(mCurrent - 1);
-            } else if (vx < -fv && mCurrent < getChildCount() - 1) {
-                scrollByPanel(mCurrent + 1);
-            } else {
-                scrollByCurrentPosition();
-            }
-
-            return super.onActionUp(e);
-        }
-
-        @Override
-        public State onActionMove(MotionEvent e) {
-            final float x = e.getX();
-            final boolean wp = isWrappingPermitted();
-            final int sx = getScrollX();
-            int dx = (int) (mLastX - x);
-
-            mLastX = x;
-
-            if ( dx < 0 ) {
-                if (sx <= 0 ) {
-                    if ( wp ) {
-                        mDrawState = mLeftDrawState;
-                    } else {
-                        dx = 0;
-                    }
-                }
-                scrollBy(dx, 0);
-            } else if ( dx > 0 ) {
-                int cr = getChildAt(getChildCount() - 1).getRight();
-                int space = cr - sx - getWidth();
-                if (space <= 0 ) {
-                    if ( wp ) {
-                        mDrawState = mRightDrawState;
-                        enableChildrenCache();
-                        space += getWidth() * 2;
-                    } else {
-                        space = 0;
-                    }
-                }
-                if ( space > 0 ) {
-                    scrollBy(Math.min(space, dx), 0);
-                }
-            }
-
-            return super.onActionMove(e);
-        }
-    };
-
-    State mNeutralState = new State();
-    State mMotionState = new InMotion();
-
-    State mState = mNeutralState;
-
-    // shared b/w State instances - ugly
-    private float mLastX;
-
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
         boolean intercept = false;
@@ -656,4 +657,5 @@ public class Panels extends ViewGroup {
 
         return rv;
     }
+    // overrides - end
 }
