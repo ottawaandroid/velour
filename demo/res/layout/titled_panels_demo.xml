@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ca.ottawaandroid.velour.TitledPanels
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	xmlns:velour="http://foo.com/velour"
+	android:id="@+id/panels"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    velour:permit_wrapping="false"
+    velour:fling_velocity="500"
+    velour:default_panel="1"
+    >
+ 	<ListView xmlns:android="http://schemas.android.com/apk/res/android"
+	    android:layout_width="fill_parent"
+	    android:layout_height="fill_parent"
+	    android:background="#0f0"
+	    />
+ 	<ListView xmlns:android="http://schemas.android.com/apk/res/android"
+	    android:layout_width="fill_parent"
+	    android:layout_height="fill_parent"
+	    android:background="#00f"
+	    />
+	<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+	    android:layout_width="fill_parent"
+	    android:layout_height="fill_parent"
+		android:text="The Golden Spike (aka The Last Spike[1]) is the ceremonial final spike driven by Leland Stanford to join the rails of the First Transcontinental Railroad across the United States connecting the Central Pacific and Union Pacific railroads on May 10, 1869 at Promontory Summit, Utah Territory."
+	    />
+</ca.ottawaandroid.velour.TitledPanels>
+

@@ -30,7 +30,7 @@ import android.widget.Toast;
 
 public class MainActivity extends ListActivity
 {
-	private static final String[] mNames = { "Panels", "Panels Custom" };
+	private static final String[] mNames = { "Panels", "Panels Custom", "Titled Panels" };
     private final HashMap<String, Class<?>> mActivities = new HashMap<String, Class<?>>();
 
 	@Override
@@ -44,6 +44,7 @@ public class MainActivity extends ListActivity
 	private void buildActivities() {
 		mActivities.put("Panels", PanelsDemoActivity.class);
 		mActivities.put("Panels Custom", CustomPanelsDemoActivity.class);
+		mActivities.put("Titled Panels", TitledPanelsDemoActivity.class);
 	}
 	
 	private void setupList() {

@@ -24,6 +24,8 @@ package ca.ottawaandroid.velour;
   * google docs for android.
   *
   */
+import java.util.ArrayList;
+
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -37,7 +39,7 @@ import android.view.ViewGroup;
 import android.widget.Scroller;
 
 public class Panels extends ViewGroup {
-    private static final int INVALID_PANEL = -1;
+    public static final int INVALID_PANEL = -1;
 
     private Scroller mScroller;
     private int mCurrent;
@@ -50,6 +52,19 @@ public class Panels extends ViewGroup {
     private int mDefaultPanel = 0;
     private int mTouchFuzz = 0;
 
+    public static abstract class Listener {
+    	public void onPanelMotion(int panelIndex) {
+    		
+    	}
+    	
+    	public void onPanelChanged(int panelIndex) {
+    		
+    	}
+
+		public void onPanelPending(int mCurrent) {
+		}
+    }
+    
     public Panels(Context ctx) {
         super(ctx);
     }
@@ -71,8 +86,19 @@ public class Panels extends ViewGroup {
 
     private void setupControl() {
         mScroller = new Scroller(getContext());
-        mCurrent = getDefaultPanel();
+        updateCurrent(getDefaultPanel());
     }
+
+	private void updateNext(int pi) {
+		mNext = pi;
+	}
+
+	private void updateCurrent(int index) {
+		mCurrent = index;
+		for ( Listener l : mListeners ) {
+			l.onPanelChanged(mCurrent);
+		}
+	}
 
     private void setupOptions(AttributeSet as) {
         // TODO: not read properly yet..
@@ -266,7 +292,7 @@ public class Panels extends ViewGroup {
         }
     }
 
-    private int getCurrentPanel() {
+    public int getCurrentPanel() {
         return mCurrent;
     }
 
@@ -321,7 +347,7 @@ public class Panels extends ViewGroup {
             pi = wrapIndexRight();
         }
 
-        mNext = pi;
+        updateNext(pi);
         return requestedI * getWidth();
     }
 
@@ -499,6 +525,8 @@ public class Panels extends ViewGroup {
     // shared b/w State instances - ugly
     private float mLastX;
 
+	private ArrayList<Listener> mListeners = new ArrayList<Listener>();
+
     // overrides
     @Override
     protected void dispatchDraw(Canvas can) {
@@ -527,8 +555,8 @@ public class Panels extends ViewGroup {
                 invalidate();
             }
         } else if ( isNextValid() ) {
-            mCurrent = Math.max(0, Math.min(mNext, getChildCount() - 1));
-            mNext = INVALID_PANEL;
+            updateCurrent(Math.max(0, Math.min(mNext, getChildCount() - 1)));
+            updateNext(INVALID_PANEL);
 
             mDrawState = mNeutralDrawState;
             clearChildrenCache();
@@ -657,5 +685,30 @@ public class Panels extends ViewGroup {
 
         return rv;
     }
+    
+    
     // overrides - end
+    
+    @Override
+	protected void onScrollChanged(int l, int t, int oldl, int oldt) {
+		super.onScrollChanged(l, t, oldl, oldt);
+		final int w = getWidth();
+		if ( l < oldl && l % w < w / 2 && l > 0 ) {
+			for ( Listener li : mListeners ) {
+				li.onPanelPending(mCurrent - 1);
+			}			
+		} else if ( l > oldl && l % w > w / 2 && l < w * getChildCount() ) {
+			for ( Listener li : mListeners ) {
+				li.onPanelPending(mCurrent + 1);
+			}						
+		}
+	}
+
+	public void addListener(Listener l) {
+    	mListeners.add(l);
+    }
+    
+    public void removeListener(Listener l) {
+    	mListeners .remove(l);
+    }
 }

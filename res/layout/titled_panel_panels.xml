@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ca.ottawaandroid.velour.Panels
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:velour="http://foo.com/velour"
+    android:id="@+id/panels"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:background="#ff0"
+    velour:permit_wrapping="false"
+    velour:fling_velocity="500"
+    velour:default_panel="1"
+/>

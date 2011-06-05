@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Velour Demos</string>
+    <string name="title0">Title Zero</string>
+    <string name="title1">Title One</string>
+    <string name="title2">Title Two</string>
 </resources>
